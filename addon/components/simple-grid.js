@@ -3,13 +3,19 @@ import layout from '../templates/components/simple-grid';
 
 import CspStyleMixin from 'ember-cli-csp-style/mixins/csp-style';
 
-const { Component, computed, A, $, observer, run, set } = Ember;
+const { Component, computed, A, $, observer, run, get, set } = Ember;
 
 export default Component.extend(CspStyleMixin, {
   layout,
 
   styleBindings: ['position'],
   classNames: ['simple-grid'],
+
+  /**
+   * Allows parent of component to trigger a reflow (e.g., where the user resized the browser)
+   * @type {Boolean}
+   */
+  reflowGrid: false,
 
   /**
    * Prebuild position value
@@ -24,8 +30,7 @@ export default Component.extend(CspStyleMixin, {
   columnWidth: computed('columns', 'layoutWidth', function() {
     const {
       columns, layoutWidth, gutter
-    } = this.getProperties(
-      'columns', 'layoutWidth', 'gutter'
+    } = this.getProperties(      'columns', 'layoutWidth', 'gutter'
     );
 
     return Math.ceil((layoutWidth / columns) - gutter);
@@ -35,8 +40,10 @@ export default Component.extend(CspStyleMixin, {
    * Width of grid
    * @type {Number}
    */
-  layoutWidth: computed('layoutWidth', 'columns', 'columnWidth', 'gutter', function() {
-    return this.$().width();
+  layoutWidth: computed('layoutWidth', 'columns', 'columnWidth', 'gutter', 'innerWidth', function() {
+    let innerWidth = get(this, 'innerWidth');
+    let currentWidth = this.$().width();
+    return innerWidth > currentWidth ? innerWidth : currentWidth;
   }),
 
   /**
@@ -68,7 +75,7 @@ export default Component.extend(CspStyleMixin, {
    * @return {Array} [description]
    */
   colContainers: computed('columns', function() {
-    const columns = this.get('columns');
+    const columns = get(this, 'columns');
     const colContainers = A();
 
     for (let i = 0; i < columns; i++) {
@@ -90,22 +97,20 @@ export default Component.extend(CspStyleMixin, {
       items,
       gutter,
       colContainers,
-    } = this.getProperties(
-      'items',
+    } = this.getProperties(      'items',
       'gutter',
       'colContainers',
     );
 
     const _itemsPerColumns = colContainers.map(function(c) {
       return items.filter((i) => {
-        return i.get('column') === c.index;
+        return get(i, 'column') === c.index;
       });
     });
 
     return _itemsPerColumns.map(function(columnItems, index) {
       set(colContainers[index], 'height', columnItems.reduce((acc, item) => {
-        const elemHeight = $(item.get('element')).height() || 0;
-
+        let elemHeight = $(get(item, 'element')).height() || 0;
         return acc + gutter + elemHeight;
       }, 0));
 
@@ -120,8 +125,7 @@ export default Component.extend(CspStyleMixin, {
   highestColumn: computed('columnHeights.[]', function() {
     const {
       columnHeights
-    } = this.getProperties(
-      'columnHeights'
+    } = this.getProperties(      'columnHeights'
     );
 
     const highestColumn = columnHeights.slice(
@@ -161,6 +165,13 @@ export default Component.extend(CspStyleMixin, {
     return lowestColumn;
   }),
 
+  gridRerender: observer('innerWidth', function() {
+    if (get(this, 'innerWidth') > 0) {
+      set(this, 'innerWidth', 0);
+      this.fireRerender();
+    }
+  }),
+
   columnsRerender: observer('columns', function() {
     this.fireRerender();
   }),
@@ -178,7 +189,7 @@ export default Component.extend(CspStyleMixin, {
       'items',
     );
 
-    if(item.get('isDestroyed')) {
+    if(get(item, 'isDestroyed')) {
       return;
     }
 
@@ -187,7 +198,7 @@ export default Component.extend(CspStyleMixin, {
         item.setProperties({
           column: lowestColumn.index,
           top: lowestColumn.height,
-          width: this.get('columnWidth'),
+          width: get(this, 'columnWidth'),
         });
       });
     })
@@ -196,8 +207,8 @@ export default Component.extend(CspStyleMixin, {
   },
 
   reRenderItems() {
-    const items = this.get('items')
-    const clonedItems = items.slice(0, items.get('length')).filter(
+    const items = get(this, 'items')
+    const clonedItems = items.slice(0, get(items, 'length')).filter(
       (i) => {
         return !i.isDestroyed;
       }
@@ -255,11 +266,11 @@ export default Component.extend(CspStyleMixin, {
 
     const cloned = items.slice(
       indexStartRerender,
-      items.get('length')
+      get(items, 'length')
     );
 
     items.removeObjects(
-      items.slice(indexStartRerender, items.get('length'))
+      items.slice(indexStartRerender, get(items, 'length'))
     );
 
     cloned.forEach((item) => {
@@ -308,7 +319,7 @@ export default Component.extend(CspStyleMixin, {
   },
 
   setHeight() {
-    const highestColumn = this.get('highestColumn');
+    const highestColumn = get(this, 'highestColumn');
 
     this.$().css({
       height: highestColumn.height,
